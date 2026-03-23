@@ -372,7 +372,7 @@
             <div class="login-split-left">
                 <div class="split-left-top">
                     <div class="split-logo-wrap">
-                        <img src="{{ asset('logo.jpg') }}" alt="IETI Logo">
+                        <img src="{{ asset('Logo.png') }}" alt="IETI Logo">
                     </div>
                 </div>
                 <div class="split-left-bottom">

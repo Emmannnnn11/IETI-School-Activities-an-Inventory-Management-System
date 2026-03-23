@@ -55,6 +55,22 @@
             object-fit: cover;
         }
 
+        .sidebar-brand {
+            padding: 18px 10px 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sidebar-brand img {
+            border-radius: 50%;
+            border: 0px solid var(--ieti-green);
+            width: 110px;
+            height: 110px;
+            object-fit: cover;
+            background: transparent;
+        }
+
         .navbar-nav .nav-link {
             color: var(--ieti-black) !important;
             font-weight: 500;
@@ -377,7 +393,6 @@
                 <i class="fas fa-bars" id="sidebarToggleIcon"></i>
             </button>
             <a class="navbar-brand d-flex align-items-center" href="{{ url('/home') }}">
-             <img src="{{ asset('logo.jpg') }}" alt="IETI Logo" class="me-2">
                    IETI School Activities Scheduling and Inventory Management System
             </a>
 
@@ -422,6 +437,9 @@
             <div class="app-shell">
                 <div class="sidebar-wrapper" id="sidebarWrapper">
                     <div class="sidebar" id="sidebar">
+                            <div class="sidebar-brand">
+                                <img src="{{ asset('Logo.png') }}" alt="IETI Logo">
+                            </div>
                         <nav class="nav flex-column">
                             <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
                                 <i class="fas fa-home me-2"></i> Dashboard
@@ -433,11 +451,6 @@
                             @if(Auth::user()->isAdmin())
                             <a class="nav-link {{ request()->routeIs('events.history') ? 'active' : '' }}" href="{{ route('events.history') }}">
                                 <i class="fas fa-history me-2"></i> Event History
-                            </a>
-                            @endif
-                            @if(Auth::user()->canCreateEvents())
-                            <a class="nav-link {{ request()->routeIs('events.create') ? 'active' : '' }}" href="{{ route('events.create') }}">
-                                <i class="fas fa-plus me-2"></i> Create Event
                             </a>
                             @endif
                             @if(Auth::user()->canManageInventory())
