@@ -103,7 +103,7 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-box-open me-2"></i>
-                        Pending Borrowed Items
+                        Borrowed Items
                     </h5>
                 </div>
                 <div class="card-body">
