@@ -30,6 +30,10 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('approve', function ($user, $event) {
             return $user->canApproveEvents();
         });
+
+        Gate::define('view-event-history', function ($user) {
+            return $user->isAdmin();
+        });
     }
 }
 

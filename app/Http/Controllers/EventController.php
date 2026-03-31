@@ -6,15 +6,27 @@ use App\Models\Event;
 use App\Models\EventHistory;
 use App\Models\EventItem;
 use App\Models\InventoryItem;
+use App\Models\Location;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EventController extends Controller
 {
     private const AUTO_REJECTION_REASON = 'This event was automatically rejected because another event with higher priority has already been approved for the same schedule.';
+    private const DEFAULT_LOCATIONS = [
+        'Covered Court',
+        'Open Court 1',
+        'Open Court 2',
+        'Sipag Hall',
+        'Junior High School Computer Laboratory',
+        'College Computer Laboratory 1',
+        'College Computer Laboratory 2',
+        'Studio',
+    ];
 
     /**
      * Create a new controller instance.
@@ -525,6 +537,8 @@ class EventController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $locations = $this->getAvailableLocations();
+
         $inventoryItems = InventoryItem::available()
             ->orderBy('category', 'asc')
             ->orderBy('name', 'asc')
@@ -539,7 +553,10 @@ class EventController extends Controller
                 return [$displayCategory => $items->values()];
             });
 
-        return view('events.create', compact('inventoryItems'));
+        return view('events.create', [
+            'inventoryItems' => $inventoryItems,
+            'locations' => $locations,
+        ]);
     }
 
     /**
@@ -566,37 +583,72 @@ class EventController extends Controller
             $request->merge(['inventory_items' => $filteredItems]);
         }
 
+        $locationRules = [
+            'location' => 'required_without:new_location|string|max:255',
+        ];
+
+        if ($user->isAdmin()) {
+            $locationRules['new_location'] = 'nullable|string|max:255';
+        }
+
         // Validate the incoming request
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'event_date' => 'required|date|after_or_equal:' . now()->toDateString(),
+            'start_date' => 'required|date|after_or_equal:' . now()->toDateString(),
+            'end_date' => 'required|date|after_or_equal:start_date',
             'start_time' => 'required',
             'end_time' => 'required|after:start_time',
-            'location' => 'required|string|max:255',
             'inventory_items' => 'nullable|array',
             'inventory_items.*.id' => 'required|exists:inventory_items,id',
             'inventory_items.*.quantity' => 'required|integer|min:1',
-        ], [
+        ], $locationRules), [
             'title.required' => 'The event title is required.',
-            'event_date.required' => 'The event date is required.',
-            'event_date.after_or_equal' => 'The event date must be today or in the future.',
+            'start_date.required' => 'The start date is required.',
+            'start_date.after_or_equal' => 'The start date must be today or in the future.',
+            'end_date.required' => 'The end date is required.',
+            'end_date.after_or_equal' => 'The end date cannot be earlier than the start date.',
             'start_time.required' => 'The start time is required.',
             'end_time.required' => 'The end time is required.',
             'end_time.after' => 'The end time must be after the start time.',
             'location.required' => 'The location is required.',
+            'location.required_without' => 'The location is required unless you add a new location.',
         ]);
 
         Log::info('Event creation attempt', [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'title' => $validated['title'],
-            'event_date' => $validated['event_date'],
+            'start_date' => $validated['start_date'],
+            'end_date' => $validated['end_date'],
         ]);
 
-        // Check for date/time conflicts with approved events
+        // Check for date/time conflicts with approved events across the selected date range
+        $startDate = $validated['start_date'];
+        $endDate = $validated['end_date'];
+
         $conflictingEvent = Event::approved()
-            ->whereDate('event_date', $validated['event_date'])
+            ->where(function ($query) use ($startDate, $endDate) {
+                // New multi-day events: overlap if date ranges intersect
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereNotNull('start_date')
+                      ->whereNotNull('end_date')
+                      ->where(function ($q2) use ($startDate, $endDate) {
+                          $q2->whereBetween('start_date', [$startDate, $endDate])
+                             ->orWhereBetween('end_date', [$startDate, $endDate])
+                             ->orWhere(function ($q3) use ($startDate, $endDate) {
+                                 $q3->where('start_date', '<=', $startDate)
+                                    ->where('end_date', '>=', $endDate);
+                             });
+                      });
+                })
+                // Legacy single-day events where only event_date is populated
+                ->orWhere(function ($q) use ($startDate, $endDate) {
+                    $q->whereNull('start_date')
+                      ->whereNull('end_date')
+                      ->whereBetween('event_date', [$startDate, $endDate]);
+                });
+            })
             ->where(function($query) use ($validated) {
                 $query->where(function($q) use ($validated) {
                     // Check if new event starts during an existing event
@@ -623,6 +675,16 @@ class EventController extends Controller
         DB::beginTransaction();
         
         try {
+            // Resolve location, allowing admins to add new locations
+            $locationName = $validated['location'] ?? null;
+            if ($user->isAdmin() && !empty($validated['new_location'] ?? null)) {
+                $locationName = trim($validated['new_location']);
+
+                if ($locationName !== '' && Schema::hasTable('locations')) {
+                    Location::firstOrCreate(['name' => $locationName]);
+                }
+            }
+
             // Set status based on who creates the event
             // Admin events are auto-approved, Head events need admin approval
             $status = $user->isAdmin() ? 'approved' : 'pending';
@@ -632,10 +694,13 @@ class EventController extends Controller
             $event = Event::create([
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
-                'event_date' => $validated['event_date'],
+                // Keep event_date for backward compatibility; treat as start_date
+                'event_date' => $validated['start_date'],
+                'start_date' => $validated['start_date'],
+                'end_date' => $validated['end_date'],
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],
-                'location' => $validated['location'],
+                'location' => $locationName,
                 'department' => $user->department,
                 'status' => $status,
                 'created_by' => $user->id,
@@ -665,7 +730,7 @@ class EventController extends Controller
                     
                     if (is_numeric($inventoryItemId) && is_numeric($quantity) && $quantity > 0) {
                         $inventoryItem = InventoryItem::find($inventoryItemId);
-                        $availableQuantity = $inventoryItem ? $inventoryItem->getAvailableQuantityForDate($validated['event_date']) : 0;
+                        $availableQuantity = $inventoryItem ? $inventoryItem->getAvailableQuantityForDate($validated['start_date']) : 0;
                         $quantityApproved = min($quantity, $availableQuantity);
                         
                         $eventItem = $event->eventItems()->create([
@@ -817,7 +882,8 @@ class EventController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'event_date' => 'required|date|after_or_equal:' . now()->toDateString(),
+            'start_date' => 'required|date|after_or_equal:' . now()->toDateString(),
+            'end_date' => 'required|date|after_or_equal:start_date',
             'start_time' => 'required',
             'end_time' => 'required|after:start_time',
             'location' => 'required|string|max:255',
@@ -829,7 +895,28 @@ class EventController extends Controller
         // Check for date/time conflicts with approved events (excluding current event)
         $conflictingEvent = Event::approved()
             ->where('id', '!=', $event->id)
-            ->whereDate('event_date', $request->event_date)
+            ->where(function ($query) use ($request) {
+                $startDate = $request->start_date;
+                $endDate = $request->end_date;
+
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereNotNull('start_date')
+                      ->whereNotNull('end_date')
+                      ->where(function ($q2) use ($startDate, $endDate) {
+                          $q2->whereBetween('start_date', [$startDate, $endDate])
+                             ->orWhereBetween('end_date', [$startDate, $endDate])
+                             ->orWhere(function ($q3) use ($startDate, $endDate) {
+                                 $q3->where('start_date', '<=', $startDate)
+                                    ->where('end_date', '>=', $endDate);
+                             });
+                      });
+                })
+                ->orWhere(function ($q) use ($startDate, $endDate) {
+                    $q->whereNull('start_date')
+                      ->whereNull('end_date')
+                      ->whereBetween('event_date', [$startDate, $endDate]);
+                });
+            })
             ->where(function($query) use ($request) {
                 $query->where(function($q) use ($request) {
                     $q->where('start_time', '<=', $request->start_time)
@@ -856,7 +943,9 @@ class EventController extends Controller
             $event->update([
                 'title' => $request->title,
                 'description' => $request->description,
-                'event_date' => $request->event_date,
+                'event_date' => $request->start_date,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
                 'start_time' => $request->start_time,
                 'end_time' => $request->end_time,
                 'location' => $request->location,
@@ -1326,5 +1415,29 @@ class EventController extends Controller
         }
 
         return $count;
+    }
+
+    /**
+     * Return dropdown locations without crashing if locations table is not migrated yet.
+     */
+    private function getAvailableLocations()
+    {
+        try {
+            if (Schema::hasTable('locations')) {
+                $savedLocations = Location::query()
+                    ->orderBy('name')
+                    ->pluck('name');
+
+                if ($savedLocations->isNotEmpty()) {
+                    return $savedLocations;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Falling back to default locations; failed to read locations table.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return collect(self::DEFAULT_LOCATIONS);
     }
 }

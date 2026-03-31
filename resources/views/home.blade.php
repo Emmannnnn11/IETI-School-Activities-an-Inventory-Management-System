@@ -2,6 +2,31 @@
 
 @section('content')
 <div class="container-fluid">
+    <style>
+        .dashboard-card {
+            border: 1px solid #e9ecef;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+            min-height: 100%;
+        }
+
+        .dashboard-card-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            height: 100%;
+        }
+
+        .dashboard-card-link:hover .dashboard-card {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.12);
+        }
+
+        .dashboard-card-disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+    </style>
+
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -18,42 +43,29 @@
 
     <!-- Dashboard View -->
     <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <i class="fas fa-calendar-check fa-3x text-success mb-3"></i>
-                    <h4 class="text-success">{{ $events->count() }}</h4>
-                    <p class="text-muted mb-0">Upcoming events</p>
-                </div>
+        @foreach($dashboardCards as $card)
+            <div class="col-md-3 mb-3 mb-md-0">
+                @if($card['enabled'])
+                    <a href="{{ $card['route'] }}" class="dashboard-card-link" aria-label="{{ $card['title'] }}">
+                        <div class="card text-center dashboard-card h-100">
+                            <div class="card-body">
+                                <i class="{{ $card['icon'] }} fa-3x {{ $card['textClass'] }} mb-3"></i>
+                                <h4 class="{{ $card['textClass'] }}">{{ $card['count'] }}</h4>
+                                <p class="text-muted mb-0">{{ $card['title'] }}</p>
+                            </div>
+                        </div>
+                    </a>
+                @else
+                    <div class="card text-center dashboard-card dashboard-card-disabled h-100" aria-disabled="true" title="You are not authorized to access this section.">
+                        <div class="card-body">
+                            <i class="{{ $card['icon'] }} fa-3x {{ $card['textClass'] }} mb-3"></i>
+                            <h4 class="{{ $card['textClass'] }}">{{ $card['count'] }}</h4>
+                            <p class="text-muted mb-0">{{ $card['title'] }}</p>
+                        </div>
+                    </div>
+                @endif
             </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <i class="fas fa-clock fa-3x text-warning mb-3"></i>
-                    <h4 class="text-warning">{{ $events->where('status', 'pending')->count() }}</h4>
-                    <p class="text-muted mb-0">Pending Events</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <i class="fas fa-archive fa-3x text-secondary mb-3"></i>
-                    <h4 class="text-secondary">{{ $archivedEventsCount }}</h4>
-                    <p class="text-muted mb-0">Archived (Completed/Rejected)</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <i class="fas fa-boxes fa-3x text-info mb-3"></i>
-                    <h4 class="text-info">{{ $inventoryItems->count() }}</h4>
-                    <p class="text-muted mb-0">Inventory Items</p>
-                </div>
-            </div>
-        </div>
+        @endforeach
     </div>
 
     <div class="row">
@@ -103,7 +115,7 @@
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1">{{ $event->title }}</h6>
                                     <small class="text-muted">
-                                        {{ $event->event_date->format('M d, Y') }} at {{ $event->start_time }}
+                                        {{ $event->date_range_label }} at {{ $event->start_time }}
                                     </small>
                                     <small class="text-muted d-block">
                                         Department: {{ $event->department ?: ($event->creator->department ?? 'N/A') }}

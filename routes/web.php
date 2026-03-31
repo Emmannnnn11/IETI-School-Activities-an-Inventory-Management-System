@@ -45,8 +45,12 @@ Route::middleware(['auth'])->group(function () {
 
 // Event routes
 Route::middleware(['auth'])->group(function () {
-    Route::get('events/history', [EventController::class, 'history'])->name('events.history');
-    Route::get('events/history/export', [EventController::class, 'exportHistory'])->name('events.history.export');
+    Route::get('events/history', [EventController::class, 'history'])
+        ->name('events.history')
+        ->middleware('can:view-event-history');
+    Route::get('events/history/export', [EventController::class, 'exportHistory'])
+        ->name('events.history.export')
+        ->middleware('can:view-event-history');
     Route::resource('events', EventController::class);
     
     // Event approval routes
@@ -107,10 +111,15 @@ Route::middleware(['auth'])->group(function () {
                 default => null,
             };
 
+            $startDate = $event->effective_start_date;
+            $endDate = $event->effective_end_date;
+
             return [
                 'id' => $event->id,
                 'title' => $event->title,
-                'start' => $event->event_date->format('Y-m-d'),
+                // For FullCalendar: multi-day events use an exclusive end date (end + 1 day)
+                'start' => $startDate ? $startDate->format('Y-m-d') : null,
+                'end' => $endDate ? $endDate->copy()->addDay()->format('Y-m-d') : null,
                 'color' => $event->status_color,
                 'status' => $event->status,
                 'department' => $department,

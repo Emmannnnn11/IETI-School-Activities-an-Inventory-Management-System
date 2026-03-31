@@ -71,7 +71,7 @@
                                         </td>
                                         <td>
                                             <div>
-                                                <strong>{{ $event->event_date->format('M d, Y') }}</strong><br>
+                                                <strong>{{ $event->date_range_label }}</strong><br>
                                                 <small class="text-muted">
                                                     {{ \Carbon\Carbon::parse($event->start_time)->format('g:i A') }} - 
                                                     {{ \Carbon\Carbon::parse($event->end_time)->format('g:i A') }}
@@ -210,7 +210,7 @@
                                     </td>
                                     <td>
                                         <div>
-                                            <strong>{{ $event->event_date->format('M d, Y') }}</strong><br>
+                                            <strong>{{ $event->date_range_label }}</strong><br>
                                             <small class="text-muted">
                                                 {{ \Carbon\Carbon::parse($event->start_time)->format('g:i A') }} - 
                                                 {{ \Carbon\Carbon::parse($event->end_time)->format('g:i A') }}

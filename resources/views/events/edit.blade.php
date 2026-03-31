@@ -86,11 +86,22 @@
                         <div class="row">
                             <div class="col-md-4">
                                 <div class="mb-3">
-                                    <label for="event_date" class="form-label">Event Date <span class="text-danger">*</span></label>
-                                    <input type="date" class="form-control @error('event_date') is-invalid @enderror" 
-                                           id="event_date" name="event_date" 
-                                           value="{{ old('event_date', $event->event_date->format('Y-m-d')) }}" required>
-                                    @error('event_date')
+                                    <label for="start_date" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control @error('start_date') is-invalid @enderror" 
+                                           id="start_date" name="start_date" 
+                                           value="{{ old('start_date', optional($event->effective_start_date)->format('Y-m-d')) }}" required>
+                                    @error('start_date')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="end_date" class="form-label">End Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control @error('end_date') is-invalid @enderror" 
+                                           id="end_date" name="end_date" 
+                                           value="{{ old('end_date', optional($event->effective_end_date)->format('Y-m-d')) }}" required>
+                                    @error('end_date')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
@@ -227,9 +238,36 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Set minimum date to today
+    // Set minimum dates to today
     const today = new Date().toISOString().split('T')[0];
-    document.getElementById('event_date').setAttribute('min', today);
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    if (startDateInput) {
+        startDateInput.setAttribute('min', today);
+    }
+    if (endDateInput) {
+        endDateInput.setAttribute('min', today);
+    }
+
+    function validateDateRange() {
+        if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
+            if (endDateInput.value < startDateInput.value) {
+                endDateInput.setCustomValidity('End date cannot be earlier than start date');
+            } else {
+                endDateInput.setCustomValidity('');
+            }
+        }
+    }
+    if (startDateInput && endDateInput) {
+        startDateInput.addEventListener('change', function () {
+            if (endDateInput.value && endDateInput.value < startDateInput.value) {
+                endDateInput.value = startDateInput.value;
+            }
+            endDateInput.setAttribute('min', startDateInput.value || today);
+            validateDateRange();
+        });
+        endDateInput.addEventListener('change', validateDateRange);
+    }
 
     // Validate end time is after start time
     const startTimeInput = document.getElementById('start_time');

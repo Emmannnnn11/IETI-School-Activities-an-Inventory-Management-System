@@ -53,8 +53,8 @@
                     <hr>
                     <div class="row">
                         <div class="col-md-4">
-                            <h6 class="text-muted">Event Date</h6>
-                            <p class="h6">{{ $event->event_date->format('F d, Y') }}</p>
+                            <h6 class="text-muted">Event Dates</h6>
+                            <p class="h6">{{ $event->date_range_label }}</p>
                         </div>
                         <div class="col-md-4">
                             <h6 class="text-muted">Start Time</h6>
@@ -140,14 +140,15 @@
                                         @endif
                                     </small>
                                     @php
-                                        $availableQuantity = ($event->status === 'pending' && $inv)
-                                            ? $inv->getAvailableQuantityForDate($event->event_date)
+                                        $effectiveDateForAvailability = $event->effective_start_date;
+                                        $availableQuantity = ($event->status === 'pending' && $inv && $effectiveDateForAvailability)
+                                            ? $inv->getAvailableQuantityForDate($effectiveDateForAvailability)
                                             : null;
                                     @endphp
                                     @if($event->status === 'pending' && $availableQuantity !== null)
                                         <small class="d-block mt-1">
                                             <span class="badge bg-info">
-                                                Available on {{ $event->event_date->format('M d, Y') }}: {{ $availableQuantity }}
+                                                Available on {{ $effectiveDateForAvailability->format('M d, Y') }}: {{ $availableQuantity }}
                                             </span>
                                         </small>
                                     @endif

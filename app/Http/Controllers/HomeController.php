@@ -43,15 +43,34 @@ class HomeController extends Controller
         $rejectedEventsCount = Event::where('status', 'rejected')->count();
         $completedEventsCount = Event::where('status', '!=', 'rejected')
             ->where(function ($q) use ($today, $nowTime) {
-                $q->where('event_date', '<', $today)
-                    ->orWhere(function ($q2) use ($today, $nowTime) {
-                        $q2->where('event_date', $today)
-                           ->where('end_time', '<=', $nowTime);
-                    });
+                // Multi-day events (end_date set)
+                $q->where(function ($sub) use ($today, $nowTime) {
+                    $sub->whereNotNull('end_date')
+                        ->where(function ($inner) use ($today, $nowTime) {
+                            $inner->where('end_date', '<', $today)
+                                  ->orWhere(function ($q2) use ($today, $nowTime) {
+                                      $q2->where('end_date', $today)
+                                         ->where('end_time', '<=', $nowTime);
+                                  });
+                        });
+                })
+                // Legacy single-day events (no end_date)
+                ->orWhere(function ($sub) use ($today, $nowTime) {
+                    $sub->whereNull('end_date')
+                        ->where(function ($inner) use ($today, $nowTime) {
+                            $inner->where('event_date', '<', $today)
+                                  ->orWhere(function ($q2) use ($today, $nowTime) {
+                                      $q2->where('event_date', $today)
+                                         ->where('end_time', '<=', $nowTime);
+                                  });
+                        });
+                });
             })
             ->count();
 
         $archivedEventsCount = $rejectedEventsCount + $completedEventsCount;
+        $approvedEventsCount = $events->where('status', 'approved')->count();
+        $pendingEventsCount = $events->where('status', 'pending')->count();
 
         // Get inventory items for staff and admin
         $inventoryItems = collect();
@@ -88,6 +107,41 @@ class HomeController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return view('home', compact('events', 'inventoryItems', 'user', 'pendingBorrowedItems', 'archivedEventsCount'));
+        $dashboardCards = [
+            [
+                'title' => 'Approved Events',
+                'count' => $approvedEventsCount,
+                'icon' => 'fas fa-calendar-check',
+                'textClass' => 'text-success',
+                'route' => route('events.index', ['status' => 'approved']),
+                'enabled' => true,
+            ],
+            [
+                'title' => 'Pending Events',
+                'count' => $pendingEventsCount,
+                'icon' => 'fas fa-clock',
+                'textClass' => 'text-warning',
+                'route' => route('events.index', ['status' => 'pending']),
+                'enabled' => true,
+            ],
+            [
+                'title' => 'Archived (Completed/Rejected)',
+                'count' => $archivedEventsCount,
+                'icon' => 'fas fa-archive',
+                'textClass' => 'text-secondary',
+                'route' => route('events.history'),
+                'enabled' => $user->isAdmin(),
+            ],
+            [
+                'title' => 'Inventory Items',
+                'count' => $inventoryItems->count(),
+                'icon' => 'fas fa-boxes',
+                'textClass' => 'text-info',
+                'route' => route('inventory.index'),
+                'enabled' => $user->canManageInventory(),
+            ],
+        ];
+
+        return view('home', compact('events', 'inventoryItems', 'user', 'pendingBorrowedItems', 'archivedEventsCount', 'dashboardCards'));
     }
 }
