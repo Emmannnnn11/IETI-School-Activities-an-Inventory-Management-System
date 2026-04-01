@@ -47,6 +47,11 @@
                         </div>
                     @endif
 
+                    <div id="schedule-warning" class="alert alert-warning d-none" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <span id="schedule-warning-text"></span>
+                    </div>
+
                     <form id="create-event-form" action="{{ route('events.store') }}" method="POST">
                         @csrf
                         
@@ -147,7 +152,7 @@
                                 <div class="mb-3">
                                     <label for="start_time" class="form-label">Start Time <span class="text-danger">*</span></label>
                                     <input type="time" class="form-control @error('start_time') is-invalid @enderror" 
-                                           id="start_time" name="start_time" value="{{ old('start_time') }}" required>
+                                           id="start_time" name="start_time" value="{{ old('start_time') }}" min="08:00" max="17:00" required>
                                     @error('start_time')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -157,7 +162,7 @@
                                 <div class="mb-3">
                                     <label for="end_time" class="form-label">End Time <span class="text-danger">*</span></label>
                                     <input type="time" class="form-control @error('end_time') is-invalid @enderror" 
-                                           id="end_time" name="end_time" value="{{ old('end_time') }}" required>
+                                           id="end_time" name="end_time" value="{{ old('end_time') }}" min="08:00" max="17:00" required>
                                     @error('end_time')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -263,18 +268,49 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Set minimum dates to today
-    const today = new Date().toISOString().split('T')[0];
+    const scheduleWarning = document.getElementById('schedule-warning');
+    const scheduleWarningText = document.getElementById('schedule-warning-text');
+
+    // Set minimum dates to one week from today
+    const todayDate = new Date();
+    const minScheduleDate = new Date(todayDate);
+    minScheduleDate.setDate(minScheduleDate.getDate() + 7);
+    const minDateValue = minScheduleDate.toISOString().split('T')[0];
     const startDateInput = document.getElementById('start_date');
     const endDateInput = document.getElementById('end_date');
     if (startDateInput) {
-        startDateInput.setAttribute('min', today);
+        startDateInput.setAttribute('min', minDateValue);
     }
     if (endDateInput) {
-        endDateInput.setAttribute('min', today);
+        endDateInput.setAttribute('min', minDateValue);
+    }
+
+    function showScheduleWarning(message) {
+        if (!scheduleWarning || !scheduleWarningText) {
+            return;
+        }
+        scheduleWarningText.textContent = message;
+        scheduleWarning.classList.remove('d-none');
+    }
+
+    function hideScheduleWarning() {
+        if (!scheduleWarning) {
+            return;
+        }
+        scheduleWarning.classList.add('d-none');
     }
 
     function validateDateRange() {
+        if (startDateInput && startDateInput.value) {
+            if (startDateInput.value < minDateValue) {
+                startDateInput.setCustomValidity('Events must be scheduled at least one week in advance');
+                showScheduleWarning('Events must be scheduled at least one week in advance.');
+            } else {
+                startDateInput.setCustomValidity('');
+                hideScheduleWarning();
+            }
+        }
+
         if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
             if (endDateInput.value < startDateInput.value) {
                 endDateInput.setCustomValidity('End date cannot be earlier than start date');
@@ -288,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (endDateInput.value && endDateInput.value < startDateInput.value) {
                 endDateInput.value = startDateInput.value;
             }
-            endDateInput.setAttribute('min', startDateInput.value || today);
+            endDateInput.setAttribute('min', startDateInput.value || minDateValue);
             validateDateRange();
         });
         endDateInput.addEventListener('change', validateDateRange);
@@ -299,12 +335,34 @@ document.addEventListener('DOMContentLoaded', function() {
     const endTimeInput = document.getElementById('end_time');
     
     function validateTime() {
+        let hasWorkingHoursError = false;
+
         if (startTimeInput.value && endTimeInput.value) {
             if (endTimeInput.value <= startTimeInput.value) {
                 endTimeInput.setCustomValidity('End time must be after start time');
             } else {
                 endTimeInput.setCustomValidity('');
             }
+        }
+
+        if (startTimeInput.value && (startTimeInput.value < '08:00' || startTimeInput.value > '17:00')) {
+            startTimeInput.setCustomValidity('Events can only be scheduled between 8:00 AM and 5:00 PM');
+            hasWorkingHoursError = true;
+        } else if (startTimeInput.validationMessage === 'Events can only be scheduled between 8:00 AM and 5:00 PM') {
+            startTimeInput.setCustomValidity('');
+        }
+
+        if (endTimeInput.value && (endTimeInput.value < '08:00' || endTimeInput.value > '17:00')) {
+            endTimeInput.setCustomValidity('Events can only be scheduled between 8:00 AM and 5:00 PM');
+            hasWorkingHoursError = true;
+        } else if (endTimeInput.validationMessage === 'Events can only be scheduled between 8:00 AM and 5:00 PM') {
+            endTimeInput.setCustomValidity('');
+        }
+
+        if (hasWorkingHoursError) {
+            showScheduleWarning('Events can only be scheduled between 8:00 AM and 5:00 PM.');
+        } else if (scheduleWarningText && scheduleWarningText.textContent.includes('8:00 AM and 5:00 PM')) {
+            hideScheduleWarning();
         }
     }
     
@@ -348,6 +406,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Validate form
+            validateDateRange();
+            validateTime();
             if (!createForm.checkValidity()) {
                 evt.preventDefault();
                 evt.stopPropagation();

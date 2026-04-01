@@ -591,26 +591,34 @@ class EventController extends Controller
             $locationRules['new_location'] = 'nullable|string|max:255';
         }
 
+        $minimumStartDate = now()->addDays(7)->toDateString();
+
         // Validate the incoming request
         $validated = $request->validate(array_merge([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'start_date' => 'required|date|after_or_equal:' . now()->toDateString(),
+            'start_date' => 'required|date|after_or_equal:' . $minimumStartDate,
             'end_date' => 'required|date|after_or_equal:start_date',
-            'start_time' => 'required',
-            'end_time' => 'required|after:start_time',
+            'start_time' => 'required|date_format:H:i|after_or_equal:08:00|before_or_equal:17:00',
+            'end_time' => 'required|date_format:H:i|after:start_time|after_or_equal:08:00|before_or_equal:17:00',
             'inventory_items' => 'nullable|array',
             'inventory_items.*.id' => 'required|exists:inventory_items,id',
             'inventory_items.*.quantity' => 'required|integer|min:1',
         ], $locationRules), [
             'title.required' => 'The event title is required.',
             'start_date.required' => 'The start date is required.',
-            'start_date.after_or_equal' => 'The start date must be today or in the future.',
+            'start_date.after_or_equal' => 'Events must be scheduled at least one week in advance.',
             'end_date.required' => 'The end date is required.',
             'end_date.after_or_equal' => 'The end date cannot be earlier than the start date.',
             'start_time.required' => 'The start time is required.',
+            'start_time.date_format' => 'The start time format is invalid.',
+            'start_time.after_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
+            'start_time.before_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
             'end_time.required' => 'The end time is required.',
+            'end_time.date_format' => 'The end time format is invalid.',
             'end_time.after' => 'The end time must be after the start time.',
+            'end_time.after_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
+            'end_time.before_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
             'location.required' => 'The location is required.',
             'location.required_without' => 'The location is required unless you add a new location.',
         ]);

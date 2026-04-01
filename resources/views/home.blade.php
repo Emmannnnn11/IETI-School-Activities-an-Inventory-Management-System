@@ -25,6 +25,55 @@
             cursor: not-allowed;
             opacity: 0.6;
         }
+
+        .event-hover-tooltip {
+            position: fixed;
+            z-index: 9999;
+            max-width: min(320px, calc(100vw - 24px));
+            background: rgba(33, 37, 41, 0.95);
+            color: #fff;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 120ms ease, transform 120ms ease;
+        }
+
+        .event-hover-tooltip.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .event-hover-tooltip .tt-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .event-hover-tooltip .tt-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .event-hover-tooltip .tt-label {
+            flex: 0 0 auto;
+            color: rgba(255, 255, 255, 0.7);
+            min-width: 76px;
+        }
+
+        .event-hover-tooltip .tt-value {
+            flex: 1 1 auto;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 
     <div class="row">
@@ -96,8 +145,13 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card mb-3">
+        @php
+            $currentUser = Auth::user();
+            $sidebarBorrowedFirst = in_array($currentUser->role, ['staff', 'Head Maintenance'])
+                || in_array(strtolower(trim((string) $currentUser->name)), ['arthur', 'alden']);
+        @endphp
+        <div class="col-md-4 d-flex flex-column gap-3">
+            <div class="card {{ $sidebarBorrowedFirst ? 'order-2' : '' }}">
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-list me-2"></i>
@@ -130,7 +184,7 @@
                 </div>
             </div>
             
-            <div class="card">
+            <div class="card {{ $sidebarBorrowedFirst ? 'order-1' : '' }}">
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-box-open me-2"></i>
@@ -209,6 +263,104 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var calendarEl = document.getElementById('calendar');
+    var activeTooltipEl = null;
+    var activeTooltipEventId = null;
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatTime(value) {
+        if (!value) return '—';
+        var str = String(value).trim();
+        if (!str) return '—';
+
+        // Accept "HH:mm" or "HH:mm:ss"
+        var match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+        if (!match) return str;
+
+        var hh = parseInt(match[1], 10);
+        var mm = parseInt(match[2], 10);
+        if (Number.isNaN(hh) || Number.isNaN(mm)) return str;
+
+        var ampm = hh >= 12 ? 'PM' : 'AM';
+        var hour12 = hh % 12;
+        if (hour12 === 0) hour12 = 12;
+        return hour12 + ':' + String(mm).padStart(2, '0') + ' ' + ampm;
+    }
+
+    function buildTooltipHtml(event) {
+        var props = event.extendedProps || {};
+        var scheduler = props.scheduler_department || props.department || props.creator_role || '—';
+        var location = props.location || '—';
+        var startTime = formatTime(props.start_time);
+        var endTime = formatTime(props.end_time);
+        var timeRange = (startTime === '—' && endTime === '—') ? '—' : (startTime + ' – ' + endTime);
+
+        return (
+            '<div class="tt-title">' + escapeHtml(event.title || 'Event') + '</div>' +
+            '<div class="tt-row"><div class="tt-label">Scheduler</div><div class="tt-value">' + escapeHtml(scheduler) + '</div></div>' +
+            '<div class="tt-row"><div class="tt-label">Time</div><div class="tt-value">' + escapeHtml(timeRange) + '</div></div>' +
+            '<div class="tt-row"><div class="tt-label">Location</div><div class="tt-value">' + escapeHtml(location) + '</div></div>'
+        );
+    }
+
+    function ensureTooltipEl() {
+        if (activeTooltipEl) return activeTooltipEl;
+        activeTooltipEl = document.createElement('div');
+        activeTooltipEl.className = 'event-hover-tooltip';
+        activeTooltipEl.setAttribute('role', 'tooltip');
+        document.body.appendChild(activeTooltipEl);
+        return activeTooltipEl;
+    }
+
+    function positionTooltip(el, clientX, clientY) {
+        var offset = 12;
+        var x = clientX + offset;
+        var y = clientY + offset;
+
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+
+        // Clamp to viewport after render
+        var rect = el.getBoundingClientRect();
+        var maxLeft = window.innerWidth - rect.width - 12;
+        var maxTop = window.innerHeight - rect.height - 12;
+        var clampedLeft = Math.max(12, Math.min(x, maxLeft));
+        var clampedTop = Math.max(12, Math.min(y, maxTop));
+        el.style.left = clampedLeft + 'px';
+        el.style.top = clampedTop + 'px';
+    }
+
+    function showTooltip(event, jsEvent) {
+        var el = ensureTooltipEl();
+        activeTooltipEventId = event.id;
+        el.innerHTML = buildTooltipHtml(event);
+        positionTooltip(el, jsEvent.clientX, jsEvent.clientY);
+        requestAnimationFrame(function () {
+            el.classList.add('is-visible');
+        });
+    }
+
+    function hideTooltip() {
+        if (!activeTooltipEl) return;
+        activeTooltipEl.classList.remove('is-visible');
+        activeTooltipEventId = null;
+    }
+
+    document.addEventListener('mousemove', function (e) {
+        if (!activeTooltipEl || !activeTooltipEventId) return;
+        positionTooltip(activeTooltipEl, e.clientX, e.clientY);
+    }, { passive: true });
+
+    window.addEventListener('scroll', hideTooltip, { passive: true });
+    window.addEventListener('resize', hideTooltip, { passive: true });
+
     var calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         headerToolbar: {
@@ -221,22 +373,41 @@ document.addEventListener('DOMContentLoaded', function() {
             // Redirect to event details
             window.location.href = '/events/' + info.event.id;
         },
+        eventMouseEnter: function(info) {
+            showTooltip(info.event, info.jsEvent);
+        },
+        eventMouseLeave: function() {
+            hideTooltip();
+        },
         eventDidMount: function(info) {
-            // Add custom styling based on status
+            // Add custom styling based on status (apply to FullCalendar CSS variables so the whole
+            // event block fills consistently across views).
+            let statusBg = null;
+            let statusText = null;
             if (info.event.extendedProps.status === 'approved') {
-                info.el.style.backgroundColor = '#a3b18a';
-                info.el.style.color = 'white';
+                statusBg = '#a3b18a';
+                statusText = '#ffffff';
             } else if (info.event.extendedProps.status === 'pending') {
-                info.el.style.backgroundColor = '#FFA500';
-                info.el.style.color = 'black';
+                statusBg = '#FFA500';
+                statusText = '#000000';
             } else if (info.event.extendedProps.status === 'rejected') {
-                info.el.style.backgroundColor = '#dc3545';
-                info.el.style.color = 'white';
+                statusBg = '#dc3545';
+                statusText = '#ffffff';
+            }
+
+            if (statusBg) {
+                info.el.style.setProperty('--fc-event-bg-color', statusBg, 'important');
+                info.el.style.setProperty('--fc-event-border-color', statusBg, 'important');
+                if (statusText) {
+                    info.el.style.setProperty('--fc-event-text-color', statusText, 'important');
+                }
             }
 
             // Department color-coding accent (does not override status colors)
             if (info.event.extendedProps.department_color) {
-                info.el.style.borderLeft = '5px solid ' + info.event.extendedProps.department_color;
+                // Use !important because global CSS sets ".fc-event { border: none !important; }"
+                info.el.style.setProperty('border-left', '5px solid ' + info.event.extendedProps.department_color, 'important');
+                info.el.style.setProperty('box-shadow', 'inset 5px 0 0 ' + info.event.extendedProps.department_color, 'important');
             }
         }
     });

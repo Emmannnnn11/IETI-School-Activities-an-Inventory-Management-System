@@ -104,15 +104,35 @@ Route::middleware(['auth'])->group(function () {
         
         return response()->json($events->map(function ($event) {
             $department = $event->department ?: ($event->creator->department ?? null);
-            $departmentColor = match ($department) {
-                'Junior High School' => '#ff69b4',
-                'Senior High School' => '#1e90ff',
-                'College' => '#D3D3FF',
-                default => null,
-            };
+            $normalizedDepartment = mb_strtolower(trim((string) $department));
+            $departmentColor = null;
+
+            if ($normalizedDepartment !== '') {
+                if (str_contains($normalizedDepartment, 'junior')) {
+                    $departmentColor = '#ff69b4';
+                } elseif (str_contains($normalizedDepartment, 'senior')) {
+                    $departmentColor = '#1e90ff';
+                } elseif (str_contains($normalizedDepartment, 'college')) {
+                    $departmentColor = '#800080';
+                }
+            }
 
             $startDate = $event->effective_start_date;
             $endDate = $event->effective_end_date;
+
+            $creatorRole = $event->creator->role ?? null;
+            $creatorRoleNormalized = mb_strtolower(trim((string) $creatorRole));
+            $schedulerLabel = null;
+            if ($creatorRoleNormalized !== '') {
+                $schedulerLabel = match ($creatorRoleNormalized) {
+                    'admin' => 'Admin',
+                    'college_head' => 'College Head',
+                    'senior_head' => 'Senior High School',
+                    'junior_head' => 'Junior High School',
+                    default => ucwords(str_replace('_', ' ', $creatorRoleNormalized)),
+                };
+            }
+            $schedulerDepartmentOrRole = $department ?: $schedulerLabel;
 
             return [
                 'id' => $event->id,
@@ -127,7 +147,9 @@ Route::middleware(['auth'])->group(function () {
                 'location' => $event->location,
                 'start_time' => $event->start_time,
                 'end_time' => $event->end_time,
-                'description' => $event->description,
+                // Tooltip-safe fields (avoid full details here)
+                'scheduler_department' => $schedulerDepartmentOrRole,
+                'creator_role' => $schedulerLabel,
                 'creator' => $event->creator->name ?? 'Unknown',
             ];
         }));

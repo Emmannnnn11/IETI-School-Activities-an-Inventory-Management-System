@@ -33,7 +33,8 @@ class HomeController extends Controller
         $events = Event::with(['creator', 'approver', 'eventItems.inventoryItem'])
             ->where('status', '!=', 'rejected')
             ->future()
-            ->orderBy('event_date', 'asc')
+            ->orderBy('event_date', 'desc')
+            ->orderBy('start_time', 'desc')
             ->get();
 
         $now = now();

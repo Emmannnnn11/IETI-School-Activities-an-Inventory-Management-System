@@ -291,6 +291,74 @@
             border: none !important;
         }
 
+        /* FullCalendar: ensure events render as fully-filled solid blocks */
+        .fc .fc-daygrid-event,
+        .fc .fc-timegrid-event,
+        .fc .fc-list-event {
+            border-radius: 6px !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Month view multi-day "block" events are .fc-h-event; force full background fill */
+        .fc .fc-h-event {
+            background-color: var(--fc-event-bg-color) !important;
+            border-color: var(--fc-event-border-color, var(--fc-event-bg-color)) !important;
+            border-style: solid !important;
+            border-width: 0 !important;
+            border-radius: 6px !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+        }
+
+        .fc .fc-h-event .fc-event-main,
+        .fc .fc-h-event .fc-event-main-frame,
+        .fc .fc-h-event .fc-event-title-container {
+            background-color: transparent !important; /* outer handles the fill */
+            width: 100% !important;
+            height: 100% !important;
+            box-sizing: border-box !important;
+        }
+
+        .fc .fc-daygrid-event,
+        .fc .fc-timegrid-event {
+            margin: 2px 0 !important;
+        }
+
+        .fc .fc-daygrid-event .fc-event-main,
+        .fc .fc-timegrid-event .fc-event-main,
+        .fc .fc-list-event .fc-event-title,
+        .fc .fc-list-event .fc-event-time {
+            color: var(--fc-event-text-color, #ffffff) !important;
+        }
+
+        /* Non .fc-h-event shapes (timegrid) still need inner fill */
+        .fc .fc-timegrid-event .fc-event-main,
+        .fc .fc-timegrid-event .fc-event-main-frame {
+            background-color: var(--fc-event-bg-color) !important;
+            width: 100% !important;
+            height: 100% !important;
+            box-sizing: border-box !important;
+        }
+
+        .fc .fc-daygrid-event .fc-event-main,
+        .fc .fc-timegrid-event .fc-event-main {
+            padding: 2px 6px !important;
+            line-height: 1.2 !important;
+        }
+
+        .fc .fc-h-event .fc-event-main {
+            padding: 2px 6px !important;
+            line-height: 1.2 !important;
+        }
+
+        .fc .fc-daygrid-event .fc-event-title,
+        .fc .fc-timegrid-event .fc-event-title {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .fc-toolbar-title {
             color: var(--ieti-green) !important;
             font-weight: 600 !important;
