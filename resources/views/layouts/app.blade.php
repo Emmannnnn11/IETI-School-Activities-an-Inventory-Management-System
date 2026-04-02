@@ -36,7 +36,7 @@
 
         .navbar-brand {
             font-weight: 600;   
-            color: var(--ieti-white) !important;
+            color: var(--ieti-black) !important;
         }
 
         .navbar {
@@ -320,6 +320,13 @@
             box-sizing: border-box !important;
         }
 
+        /* Single-day / non-horizontal block events: fill outer container */
+        .fc .fc-daygrid-event.fc-daygrid-block-event:not(.fc-h-event) {
+            background-color: var(--fc-event-bg-color) !important;
+            border-color: var(--fc-event-border-color, var(--fc-event-bg-color)) !important;
+            border-width: 0 !important;
+        }
+
         .fc .fc-daygrid-event,
         .fc .fc-timegrid-event {
             margin: 2px 0 !important;
@@ -359,6 +366,25 @@
             text-overflow: ellipsis;
         }
 
+        /* List view: solid row background, no side-dot reliance */
+        .fc .fc-list-event {
+            background-color: var(--fc-event-bg-color) !important;
+            border-radius: 6px !important;
+        }
+
+        .fc .fc-list-event:hover {
+            filter: brightness(0.95);
+        }
+
+        .fc .fc-list-event-graphic .fc-list-event-dot {
+            display: none !important;
+        }
+
+        .fc .fc-list-event-title,
+        .fc .fc-list-event-time {
+            color: var(--fc-event-text-color, #ffffff) !important;
+        }
+
         .fc-toolbar-title {
             color: var(--ieti-green) !important;
             font-weight: 600 !important;
@@ -386,7 +412,7 @@
 
         .table thead th {
             background-color: var(--ieti-green);
-            color: var(--ieti-white);
+            color: var(--ieti-white) !important;
             border: none;
             font-weight: 600;
         }
@@ -547,6 +573,52 @@
                                 <span class="badge bg-secondary ms-1">{{ ucfirst(str_replace('_', ' ', Auth::user()->role)) }}</span>
                             </a>
                             <ul class="dropdown-menu">
+                                @php
+                                    $unreadCount = Auth::user()->unreadNotifications()->count();
+                                    $unreadNotifications = $unreadCount > 0
+                                        ? Auth::user()->unreadNotifications()->take(5)->get()
+                                        : collect();
+                                @endphp
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        <i class="fas fa-bell me-1"></i> Notifications
+                                        @if($unreadCount > 0)
+                                            <span class="badge bg-danger ms-1">{{ $unreadCount }}</span>
+                                        @endif
+                                    </h6>
+                                </li>
+                                @if($unreadCount > 0)
+                                    @foreach($unreadNotifications as $notification)
+                                        <li>
+                                            <a class="dropdown-item" href="#" onclick="event.preventDefault();">
+                                                <div class="d-flex align-items-start gap-2">
+                                                    <i class="fas fa-triangle-exclamation mt-1 text-danger"></i>
+                                                    <div>
+                                                        <div class="fw-semibold">
+                                                            {{ $notification->data['item_name'] ?? 'Inventory Item' }}
+                                                        </div>
+                                                        <div class="text-muted small">
+                                                            Damaged: {{ $notification->data['quantity_damaged'] ?? 0 }}
+                                                        </div>
+                                                        @if(!empty($notification->data['remarks']))
+                                                            <div class="text-muted small">
+                                                                {{ \Illuminate\Support\Str::limit((string) $notification->data['remarks'], 60) }}
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                    <li><hr class="dropdown-divider"></li>
+                                @else
+                                    <li>
+                                        <span class="dropdown-item text-muted">
+                                            No new notifications
+                                        </span>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                @endif
                                 <li><a class="dropdown-item" href="{{ route('profile.index') }}">
                                     <i class="fas fa-user me-1"></i> My Profile
                                 </a></li>
@@ -627,6 +699,19 @@
                             <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert" style="margin-top: 15px; margin-bottom: 20px;">
                                 <i class="fas fa-exclamation-circle me-2"></i>
                                 <strong>Error!</strong> {{ session('error') }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        @endif
+
+                        @if($errors->any())
+                            <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert" style="margin-top: 15px; margin-bottom: 20px;">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Please fix the following:</strong>
+                                <ul class="mb-0">
+                                    @foreach($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         @endif

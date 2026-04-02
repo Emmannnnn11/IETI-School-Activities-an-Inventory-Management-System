@@ -169,7 +169,7 @@
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1">{{ $event->title }}</h6>
                                     <small class="text-muted">
-                                        {{ $event->date_range_label }} at {{ $event->start_time }}
+                                        {{ $event->date_range_label }} at {{ \Carbon\Carbon::parse($event->start_time)->format('g:i A') }}
                                     </small>
                                     <small class="text-muted d-block">
                                         Department: {{ $event->department ?: ($event->creator->department ?? 'N/A') }}
@@ -229,20 +229,113 @@
                                 @if($canConfirm)
                                 <div class="mt-2">
                                     @if($eventItem->isReturned())
-                                        <span class="badge bg-success">
-                                            <i class="fas fa-check-circle me-1"></i> Returned
+                                        @php
+                                            $returnStatus = $eventItem->return_status;
+                                            $badgeClass = match ($returnStatus) {
+                                                'completed' => 'bg-success',
+                                                'partially_accepted' => 'bg-warning',
+                                                'damaged' => 'bg-danger',
+                                                default => 'bg-success',
+                                            };
+                                        @endphp
+                                        <span class="badge {{ $badgeClass }}">
+                                            <i class="fas fa-check-circle me-1"></i>
+                                            {{
+                                                $returnStatus
+                                                ? ucwords(str_replace('_', ' ', $returnStatus))
+                                                : 'Returned'
+                                            }}
                                         </span>
                                         <small class="text-muted d-block mt-1">
                                             Returned on: {{ $eventItem->returned_at->format('M d, Y g:i A') }}
                                         </small>
+                                        <small class="text-muted d-block mt-1">
+                                            Returned: {{ $eventItem->quantity_returned ?? 0 }},
+                                            Damaged: {{ $eventItem->quantity_damaged ?? 0 }},
+                                            Accepted: {{ $eventItem->quantity_accepted ?? 0 }}
+                                        </small>
                                     @else
-                                        <form action="{{ route('event-items.return', $eventItem->id) }}" method="POST" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-success" 
-                                                    onclick="return confirm('Are you sure you want to confirm that this item has been returned?')">
-                                                <i class="fas fa-check me-1"></i> Confirm Returned
+                                        <div class="mt-2">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-warning"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#inspectReturnModal-{{ $eventItem->id }}">
+                                                <i class="fas fa-clipboard-check me-1"></i> Inspect Return
                                             </button>
-                                        </form>
+                                        </div>
+
+                                        <div class="modal fade" id="inspectReturnModal-{{ $eventItem->id }}" tabindex="-1"
+                                             aria-labelledby="inspectReturnLabel-{{ $eventItem->id }}"
+                                             aria-hidden="true">
+                                            <div class="modal-dialog modal-lg modal-dialog-centered">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="inspectReturnLabel-{{ $eventItem->id }}">
+                                                            Inspect Return - {{ $eventItem->inventoryItem->name }}
+                                                        </h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+
+                                                    <form action="{{ route('event-items.return', $eventItem->id) }}" method="POST">
+                                                        @csrf
+                                                        <div class="modal-body">
+                                                            <div class="mb-3">
+                                                                <label class="form-label" for="quantity_returned_{{ $eventItem->id }}">
+                                                                    Quantity Returned
+                                                                </label>
+                                                                <input type="number"
+                                                                       name="quantity_returned"
+                                                                       id="quantity_returned_{{ $eventItem->id }}"
+                                                                       class="form-control"
+                                                                       min="0"
+                                                                       step="1"
+                                                                       required
+                                                                       value="{{ old('quantity_returned') }}"
+                                                                       max="{{ (int) $eventItem->quantity_approved }}">
+                                                                <small class="text-muted">Max: approved quantity ({{ (int) $eventItem->quantity_approved }})</small>
+                                                            </div>
+
+                                                            <div class="mb-3">
+                                                                <label class="form-label" for="quantity_damaged_{{ $eventItem->id }}">
+                                                                    Quantity Damaged
+                                                                </label>
+                                                                <input type="number"
+                                                                       name="quantity_damaged"
+                                                                       id="quantity_damaged_{{ $eventItem->id }}"
+                                                                       class="form-control"
+                                                                       min="0"
+                                                                       step="1"
+                                                                       required
+                                                                       value="{{ old('quantity_damaged') }}"
+                                                                       max="{{ (int) $eventItem->quantity_approved }}">
+                                                                <small class="text-muted">Damaged must be <= Returned</small>
+                                                            </div>
+
+                                                            <div class="mb-0">
+                                                                <label class="form-label" for="remarks_{{ $eventItem->id }}">
+                                                                    Remarks
+                                                                </label>
+                                                                <textarea name="remarks"
+                                                                          id="remarks_{{ $eventItem->id }}"
+                                                                          class="form-control"
+                                                                          rows="4"
+                                                                          maxlength="1000"
+                                                                >{{ old('remarks') }}</textarea>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="modal-footer">
+                                                            <button type="submit" class="btn btn-success">
+                                                                <i class="fas fa-save me-1"></i> Submit Inspection
+                                                            </button>
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
                                     @endif
                                 </div>
                                 @endif
@@ -279,6 +372,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!value) return '—';
         var str = String(value).trim();
         if (!str) return '—';
+
+        var isoMatch = str.match(/T(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (isoMatch) {
+            str = isoMatch[1] + ':' + isoMatch[2] + (isoMatch[3] ? ':' + isoMatch[3] : '');
+        }
 
         // Accept "HH:mm" or "HH:mm:ss"
         var match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
@@ -368,6 +466,18 @@ document.addEventListener('DOMContentLoaded', function() {
             center: 'title',
             right: 'dayGridMonth,listWeek'
         },
+        eventTimeFormat: {
+            hour: 'numeric',
+            minute: '2-digit',
+            meridiem: 'short',
+            hour12: true
+        },
+        slotLabelFormat: {
+            hour: 'numeric',
+            minute: '2-digit',
+            meridiem: 'short',
+            hour12: true
+        },
         events: '/api/events',
         eventClick: function(info) {
             // Redirect to event details
@@ -380,10 +490,38 @@ document.addEventListener('DOMContentLoaded', function() {
             hideTooltip();
         },
         eventDidMount: function(info) {
-            // Add custom styling based on status (apply to FullCalendar CSS variables so the whole
-            // event block fills consistently across views).
-            let statusBg = null;
-            let statusText = null;
+            function calendarTextOnHex(hex) {
+                if (!hex || typeof hex !== 'string') {
+                    return '#ffffff';
+                }
+                var m = hex.trim().match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+                if (!m) {
+                    return '#ffffff';
+                }
+                var r = parseInt(m[1], 16);
+                var g = parseInt(m[2], 16);
+                var b = parseInt(m[3], 16);
+                var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                return lum > 0.55 ? '#000000' : '#ffffff';
+            }
+
+            var dept = info.event.extendedProps.department_color;
+
+            // Remove legacy side accent (full department fill replaces it)
+            info.el.style.setProperty('border-left', 'none', 'important');
+            info.el.style.setProperty('box-shadow', 'none', 'important');
+
+            if (dept) {
+                var textColor = calendarTextOnHex(dept);
+                info.el.style.setProperty('--fc-event-bg-color', dept, 'important');
+                info.el.style.setProperty('--fc-event-border-color', dept, 'important');
+                info.el.style.setProperty('--fc-event-text-color', textColor, 'important');
+                return;
+            }
+
+            // No department color: use status colors (full fill via CSS variables)
+            var statusBg = null;
+            var statusText = null;
             if (info.event.extendedProps.status === 'approved') {
                 statusBg = '#a3b18a';
                 statusText = '#ffffff';
@@ -401,13 +539,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (statusText) {
                     info.el.style.setProperty('--fc-event-text-color', statusText, 'important');
                 }
-            }
-
-            // Department color-coding accent (does not override status colors)
-            if (info.event.extendedProps.department_color) {
-                // Use !important because global CSS sets ".fc-event { border: none !important; }"
-                info.el.style.setProperty('border-left', '5px solid ' + info.event.extendedProps.department_color, 'important');
-                info.el.style.setProperty('box-shadow', 'inset 5px 0 0 ' + info.event.extendedProps.department_color, 'important');
             }
         }
     });

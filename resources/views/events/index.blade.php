@@ -175,7 +175,7 @@
                             <thead>
                                 <tr>
                                     <th>
-                                        <a href="{{ route('events.index', array_merge(request()->query(), ['sort' => 'title', 'direction' => $nextTitleDirection])) }}" class="text-decoration-none text-dark">
+                                        <a href="{{ route('events.index', array_merge(request()->query(), ['sort' => 'title', 'direction' => $nextTitleDirection])) }}" class="text-decoration-none text-white">
                                             Event
                                             @if(($sort ?? 'event_date') === 'title')
                                                 <i class="fas fa-sort-{{ $isDesc ? 'down' : 'up' }} ms-1"></i>
@@ -183,7 +183,7 @@
                                         </a>
                                     </th>
                                     <th>
-                                        <a href="{{ route('events.index', array_merge(request()->query(), ['sort' => 'event_date', 'direction' => $nextDateDirection])) }}" class="text-decoration-none text-dark">
+                                        <a href="{{ route('events.index', array_merge(request()->query(), ['sort' => 'event_date', 'direction' => $nextDateDirection])) }}" class="text-decoration-none text-white">
                                             Date & Time
                                             @if(($sort ?? 'event_date') === 'event_date')
                                                 <i class="fas fa-sort-{{ $isDesc ? 'down' : 'up' }} ms-1"></i>

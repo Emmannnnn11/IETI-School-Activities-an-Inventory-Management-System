@@ -113,7 +113,7 @@ Route::middleware(['auth'])->group(function () {
                 } elseif (str_contains($normalizedDepartment, 'senior')) {
                     $departmentColor = '#1e90ff';
                 } elseif (str_contains($normalizedDepartment, 'college')) {
-                    $departmentColor = '#800080';
+                    $departmentColor = '#D3D3FF';
                 }
             }
 
@@ -145,8 +145,8 @@ Route::middleware(['auth'])->group(function () {
                 'department' => $department,
                 'department_color' => $departmentColor,
                 'location' => $event->location,
-                'start_time' => $event->start_time,
-                'end_time' => $event->end_time,
+                'start_time' => \Carbon\Carbon::parse($event->start_time)->format('H:i'),
+                'end_time' => \Carbon\Carbon::parse($event->end_time)->format('H:i'),
                 // Tooltip-safe fields (avoid full details here)
                 'scheduler_department' => $schedulerDepartmentOrRole,
                 'creator_role' => $schedulerLabel,

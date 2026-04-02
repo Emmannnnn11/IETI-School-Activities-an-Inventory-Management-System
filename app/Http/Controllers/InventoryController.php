@@ -486,6 +486,11 @@ class InventoryController extends Controller
                 'Event Title',
                 'Created At',
                 'Returned At',
+                'Quantity Returned',
+                'Quantity Damaged',
+                'Quantity Accepted',
+                'Return Remarks',
+                'Return Status',
             ];
 
             fwrite($output, "<Row>");
@@ -506,6 +511,12 @@ class InventoryController extends Controller
                     ? $this->safeDateTime($eventItem->returned_at)
                     : 'Not yet returned';
 
+                $quantityReturned = $eventItem->quantity_returned;
+                $quantityDamaged = $eventItem->quantity_damaged;
+                $quantityAccepted = $eventItem->quantity_accepted;
+                $returnRemarks = $eventItem->return_remarks;
+                $returnStatus = $eventItem->return_status;
+
                 $row = [
                     $itemName,
                     $department,
@@ -513,6 +524,11 @@ class InventoryController extends Controller
                     $eventTitle,
                     $createdAt,
                     $returnedAt,
+                    $quantityReturned ?? '',
+                    $quantityDamaged ?? '',
+                    $quantityAccepted ?? '',
+                    $returnRemarks ?? '',
+                    $returnStatus ?? '',
                 ];
 
                 fwrite($output, "<Row>");
@@ -535,10 +551,10 @@ class InventoryController extends Controller
 
         try {
             if ($value instanceof \DateTimeInterface) {
-                return $value->format('Y-m-d H:i:s');
+                return $value->format('Y-m-d g:i A');
             }
 
-            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d H:i:s');
+            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d g:i A');
         } catch (\Throwable $e) {
             return '';
         }

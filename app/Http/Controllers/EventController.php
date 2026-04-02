@@ -507,7 +507,7 @@ class EventController extends Controller
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d H:i:s');
+            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d g:i A');
         } catch (\Throwable $e) {
             return '';
         }
@@ -520,7 +520,7 @@ class EventController extends Controller
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($value)->format('H:i');
+            return \Illuminate\Support\Carbon::parse($value)->format('g:i A');
         } catch (\Throwable $e) {
             return '';
         }
@@ -892,12 +892,22 @@ class EventController extends Controller
             'description' => 'nullable|string',
             'start_date' => 'required|date|after_or_equal:' . now()->toDateString(),
             'end_date' => 'required|date|after_or_equal:start_date',
-            'start_time' => 'required',
-            'end_time' => 'required|after:start_time',
+            'start_time' => 'required|date_format:H:i|after_or_equal:08:00|before_or_equal:17:00',
+            'end_time' => 'required|date_format:H:i|after:start_time|after_or_equal:08:00|before_or_equal:17:00',
             'location' => 'required|string|max:255',
             'inventory_items' => 'nullable|array',
             'inventory_items.*.id' => 'required|exists:inventory_items,id',
             'inventory_items.*.quantity' => 'required|integer|min:1',
+        ], [
+            'start_time.required' => 'The start time is required.',
+            'start_time.date_format' => 'The start time format is invalid.',
+            'start_time.after_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
+            'start_time.before_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
+            'end_time.required' => 'The end time is required.',
+            'end_time.date_format' => 'The end time format is invalid.',
+            'end_time.after' => 'The end time must be after the start time.',
+            'end_time.after_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
+            'end_time.before_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
         ]);
 
         // Check for date/time conflicts with approved events (excluding current event)
@@ -1345,29 +1355,102 @@ class EventController extends Controller
                 ->with('error', 'This item cannot be returned.');
         }
 
+        $quantityApproved = (int) $eventItem->quantity_approved;
+
+        $request->validate([
+            'quantity_returned' => ['required', 'integer', 'min:0', 'max:' . $quantityApproved],
+            'quantity_damaged' => ['required', 'integer', 'min:0', 'lte:quantity_returned'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $quantityReturned = (int) $request->input('quantity_returned');
+        $quantityDamaged = (int) $request->input('quantity_damaged');
+        $quantityAccepted = max(0, $quantityReturned - $quantityDamaged); // accepted = returned - damaged
+
+        // completed if no damage, partially_accepted if some items damaged, damaged if all unusable
+        $returnStatus = match (true) {
+            $quantityDamaged === 0 => 'completed',
+            $quantityAccepted > 0 => 'partially_accepted',
+            default => 'damaged',
+        };
+
+        $returnRemarks = $request->input('remarks');
+
         DB::beginTransaction();
         
         try {
-            // Mark item as returned
+            // Reload related rows within the transaction for consistent inventory updates.
+            $eventItem = EventItem::query()
+                ->whereKey($eventItem->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($eventItem->isReturned()) {
+                DB::rollBack();
+                return redirect()->back()
+                    ->with('error', 'This item has already been returned.');
+            }
+
+            $eventItem->loadMissing(['inventoryItem', 'event.creator']);
+            $inventoryItem = $eventItem->inventoryItem()->lockForUpdate()->firstOrFail();
+
+            // Mark item as returned (with inspection details)
             $eventItem->update([
                 'returned_at' => now(),
+                'quantity_returned' => $quantityReturned,
+                'quantity_damaged' => $quantityDamaged,
+                'quantity_accepted' => $quantityAccepted,
+                'return_remarks' => $returnRemarks,
+                'return_status' => $returnStatus,
             ]);
 
-            // Restore inventory quantity
-            $inventoryItem = $eventItem->inventoryItem;
-            $inventoryItem->increment('quantity_available', $eventItem->quantity_approved);
+            // Restore inventory quantity only for accepted items.
+            if ($quantityAccepted > 0) {
+                $inventoryItem->increment('quantity_available', $quantityAccepted);
+            }
+
+            // Mark damaged items for repair/replacement (queue record).
+            if ($quantityDamaged > 0) {
+                DB::table('inventory_damage_reports')->insert([
+                    'event_item_id' => $eventItem->id,
+                    'inventory_item_id' => $inventoryItem->id,
+                    'quantity_damaged' => $quantityDamaged,
+                    'remarks' => $returnRemarks,
+                    'status' => 'pending',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
 
             DB::commit();
 
             Log::info('Item returned', [
                 'event_item_id' => $eventItem->id,
                 'inventory_item_id' => $inventoryItem->id,
-                'quantity_returned' => $eventItem->quantity_approved,
+                'quantity_returned' => $quantityReturned,
+                'quantity_damaged' => $quantityDamaged,
+                'quantity_accepted' => $quantityAccepted,
+                'return_status' => $returnStatus,
                 'returned_by' => $user->id,
             ]);
 
+            // Notify borrower if damaged items were detected.
+            if ($quantityDamaged > 0) {
+                $borrower = $eventItem->event->creator ?? null;
+                if ($borrower) {
+                    $borrower->notify(new \App\Notifications\DamagedItemsDetected(
+                        $inventoryItem->name ?? $eventItem->inventoryItem->name ?? 'Inventory Item',
+                        $quantityDamaged,
+                        $returnRemarks
+                    ));
+                }
+            }
+
             return redirect()->back()
-                ->with('success', $eventItem->inventoryItem->name . ' has been returned successfully.');
+                ->with(
+                    'success',
+                    $eventItem->inventoryItem->name . ' inspection submitted. Accepted: ' . $quantityAccepted . ', Damaged: ' . $quantityDamaged . '.'
+                );
                 
         } catch (\Exception $e) {
             DB::rollBack();

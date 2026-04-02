@@ -17,6 +17,12 @@ class EventItem extends Model
         'status',
         'notes',
         'returned_at',
+        // Return inspection fields
+        'quantity_returned',
+        'quantity_damaged',
+        'quantity_accepted',
+        'return_remarks',
+        'return_status',
     ];
 
     protected $attributes = [

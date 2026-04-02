@@ -108,24 +108,26 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
-                                    <label for="start_time" class="form-label">Start Time <span class="text-danger">*</span></label>
-                                    <input type="time" class="form-control @error('start_time') is-invalid @enderror" 
-                                           id="start_time" name="start_time" 
-                                           value="{{ old('start_time', \Carbon\Carbon::parse($event->start_time)->format('H:i')) }}" required>
-                                    @error('start_time')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
+                                    <label for="start_time_hour" class="form-label">Start Time <span class="text-danger">*</span></label>
+                                    @include('partials.time-input-12h', [
+                                        'name' => 'start_time',
+                                        'id' => 'start_time',
+                                        'fieldName' => 'start_time',
+                                        'value' => old('start_time', \Carbon\Carbon::parse($event->start_time)->format('H:i')),
+                                        'required' => true,
+                                    ])
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
-                                    <label for="end_time" class="form-label">End Time <span class="text-danger">*</span></label>
-                                    <input type="time" class="form-control @error('end_time') is-invalid @enderror" 
-                                           id="end_time" name="end_time" 
-                                           value="{{ old('end_time', \Carbon\Carbon::parse($event->end_time)->format('H:i')) }}" required>
-                                    @error('end_time')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
+                                    <label for="end_time_hour" class="form-label">End Time <span class="text-danger">*</span></label>
+                                    @include('partials.time-input-12h', [
+                                        'name' => 'end_time',
+                                        'id' => 'end_time',
+                                        'fieldName' => 'end_time',
+                                        'value' => old('end_time', \Carbon\Carbon::parse($event->end_time)->format('H:i')),
+                                        'required' => true,
+                                    ])
                                 </div>
                             </div>
                         </div>
@@ -269,22 +271,33 @@ document.addEventListener('DOMContentLoaded', function() {
         endDateInput.addEventListener('change', validateDateRange);
     }
 
-    // Validate end time is after start time
+    // Validate end time is after start time (hidden fields hold 24-hour H:i for the server)
     const startTimeInput = document.getElementById('start_time');
     const endTimeInput = document.getElementById('end_time');
     
     function validateTime() {
+        startTimeInput.setCustomValidity('');
+        endTimeInput.setCustomValidity('');
+
         if (startTimeInput.value && endTimeInput.value) {
             if (endTimeInput.value <= startTimeInput.value) {
                 endTimeInput.setCustomValidity('End time must be after start time');
-            } else {
-                endTimeInput.setCustomValidity('');
             }
+        }
+
+        if (startTimeInput.value && (startTimeInput.value < '08:00' || startTimeInput.value > '17:00')) {
+            startTimeInput.setCustomValidity('Events can only be scheduled between 8:00 AM and 5:00 PM');
+        }
+
+        if (endTimeInput.value && (endTimeInput.value < '08:00' || endTimeInput.value > '17:00')) {
+            endTimeInput.setCustomValidity('Events can only be scheduled between 8:00 AM and 5:00 PM');
         }
     }
     
     startTimeInput.addEventListener('change', validateTime);
     endTimeInput.addEventListener('change', validateTime);
+    startTimeInput.addEventListener('input', validateTime);
+    endTimeInput.addEventListener('input', validateTime);
 });
 </script>
 @endsection
