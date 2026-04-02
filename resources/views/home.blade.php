@@ -320,6 +320,7 @@
                                                                           class="form-control"
                                                                           rows="4"
                                                                           maxlength="1000"
+                                                                          required
                                                                 >{{ old('remarks') }}</textarea>
                                                             </div>
                                                         </div>

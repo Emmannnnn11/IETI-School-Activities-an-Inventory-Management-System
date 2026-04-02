@@ -596,7 +596,7 @@ class EventController extends Controller
         // Validate the incoming request
         $validated = $request->validate(array_merge([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'required|string',
             'start_date' => 'required|date|after_or_equal:' . $minimumStartDate,
             'end_date' => 'required|date|after_or_equal:start_date',
             'start_time' => 'required|date_format:H:i|after_or_equal:08:00|before_or_equal:17:00',
@@ -621,6 +621,7 @@ class EventController extends Controller
             'end_time.before_or_equal' => 'Events can only be scheduled between 8:00 AM and 5:00 PM.',
             'location.required' => 'The location is required.',
             'location.required_without' => 'The location is required unless you add a new location.',
+            'description.required' => 'The description is required.',
         ]);
 
         Log::info('Event creation attempt', [
@@ -1360,7 +1361,7 @@ class EventController extends Controller
         $request->validate([
             'quantity_returned' => ['required', 'integer', 'min:0', 'max:' . $quantityApproved],
             'quantity_damaged' => ['required', 'integer', 'min:0', 'lte:quantity_returned'],
-            'remarks' => ['nullable', 'string', 'max:1000'],
+            'remarks' => ['required', 'string', 'max:1000'],
         ]);
 
         $quantityReturned = (int) $request->input('quantity_returned');
